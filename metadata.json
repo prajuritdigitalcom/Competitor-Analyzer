@@ -1,0 +1,6 @@
+{
+  "name": "Prajurit Competitor Analyzer",
+  "description": "Free Competitor & SEO Intelligence Tool by Prajurit Digital. Analyze competitor content, keywords, SEO structure, topical clusters, internal links, and BYOK advanced SEO intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
