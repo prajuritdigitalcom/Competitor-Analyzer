@@ -1,5 +1,9 @@
 import express from 'express';
-import { apiRouter } from '../server/api.ts';
+// ⚠️ PENTING: File ini di-build LANGSUNG oleh Vercel Node.js Function builder
+// (bukan oleh Vite atau tsx). SEMUA import relatif di file ini WAJIB memakai
+// ekstensi .js (bukan .ts), meskipun konvensi proyek di file lain (server.ts,
+// vite.config.ts) memakai .ts.
+import { apiRouter } from '../server/api.js';
 
 const app = express();
 
