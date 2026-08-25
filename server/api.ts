@@ -7,6 +7,7 @@ import { validateAndNormalizeUrl, validateAndNormalizeUrlAsync } from './ssrf.js
 export const apiRouter: Router = express.Router();
 
 // Rate limiter in-memory helper per IP with configurable limit and bucket
+// Note: In a multi-instance/autoscaling environment, this acts as a best-effort per-instance rate limiter.
 const ipRequestCounts = new Map<string, { count: number; resetTime: number }>();
 
 // Periodically clean up expired rate limiter keys every 10 minutes to prevent memory growth
@@ -93,6 +94,24 @@ apiRouter.post('/crawl', async (req: Request, res: Response) => {
   }
 
   const { url, mode = 'free', apiKey, maxUrls } = req.body || {};
+
+  // Validate mode
+  if (mode !== 'free' && mode !== 'byok') {
+    res.status(400).json({ error: "Parameter 'mode' harus bernilai 'free' atau 'byok'." });
+    return;
+  }
+
+  // Validate maxUrls if provided (must be integer between 1 and 60)
+  if (maxUrls !== undefined && (typeof maxUrls !== 'number' || !Number.isInteger(maxUrls) || maxUrls < 1 || maxUrls > 60)) {
+    res.status(400).json({ error: "Parameter 'maxUrls' harus berupa bilangan bulat antara 1 dan 60." });
+    return;
+  }
+
+  // Validate apiKey if provided in byok mode
+  if (apiKey !== undefined && typeof apiKey !== 'string') {
+    res.status(400).json({ error: "Parameter 'apiKey' harus berupa string." });
+    return;
+  }
 
   // Perform SSRF & DNS validation
   const validation = await validateAndNormalizeUrlAsync(url);
@@ -202,14 +221,27 @@ apiRouter.post('/pagespeed', async (req: Request, res: Response) => {
   }
 
   const { url, sampleUrls } = req.body || {};
-  if (!url) {
-    res.status(400).json({ error: 'URL target wajib diisi.' });
+  if (!url || typeof url !== 'string') {
+    res.status(400).json({ error: 'URL target wajib diisi dan harus berupa string.' });
+    return;
+  }
+
+  // SSRF & DNS preflight check
+  const syncCheck = validateAndNormalizeUrl(url);
+  if (!syncCheck.isValid) {
+    res.status(400).json({ error: syncCheck.error || 'URL tidak valid atau dilarang.' });
+    return;
+  }
+
+  const asyncCheck = await validateAndNormalizeUrlAsync(syncCheck.normalizedUrl);
+  if (!asyncCheck.isValid) {
+    res.status(400).json({ error: asyncCheck.error || 'Host tidak valid atau privat.' });
     return;
   }
 
   try {
     const { fetchPageSpeedMetrics } = await import('./pagespeed.js');
-    const snapshot = await fetchPageSpeedMetrics(url, sampleUrls || []);
+    const snapshot = await fetchPageSpeedMetrics(asyncCheck.normalizedUrl, Array.isArray(sampleUrls) ? sampleUrls : []);
     if (!snapshot) {
       res.status(503).json({ error: 'Layanan PageSpeed sedang sibuk atau tidak dapat menjangkau URL.' });
       return;

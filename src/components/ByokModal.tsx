@@ -89,7 +89,7 @@ export const ByokModal: React.FC<ByokModalProps> = ({
             <span>Prinsip Keamanan & Privasi BYOK:</span>
           </div>
           <p className="text-slate-400 text-[11px]">
-            API Key Anda <strong>tidak pernah disimpan di database atau server kami</strong>. Kunci hanya digunakan selama sesi analisis aktif untuk mengambil data SERP Kwinside secara langsung.
+            API Key tidak disimpan di server dan hanya digunakan selama proses analisis berlangsung.
           </p>
         </div>
 

@@ -32,6 +32,7 @@ export const CrawlProgressModal: React.FC<CrawlProgressModalProps> = ({
     { id: 'keywords', label: 'Detecting keywords', detail: 'Mengekstrak n-gram & intent klasifikasi' },
     { id: 'clusters', label: 'Building content clusters', detail: 'Mengelompokkan artikel ke dalam topik pilar' },
     { id: 'insights', label: 'Generating insights', detail: 'Menghitung Prajurit Content Score & rekomendasi' },
+    { id: 'pagespeed', label: 'Auditing PageSpeed', detail: 'Mengukur Core Web Vitals via Google PageSpeed Insights' },
   ];
 
   if (mode === 'byok') {

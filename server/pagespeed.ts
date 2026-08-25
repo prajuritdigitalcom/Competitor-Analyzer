@@ -6,29 +6,66 @@ import { PerformanceSnapshot } from '../src/types/index.js';
  * Runs on sample pages (homepage + top pages) asynchronously without blocking core crawl.
  */
 
+// In-memory cache for PageSpeed audits (TTL: 1 hour)
+interface PageSpeedCacheEntry {
+  snapshot: PerformanceSnapshot;
+  cachedAt: number;
+}
+const pageSpeedCache = new Map<string, PageSpeedCacheEntry>();
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 export async function fetchPageSpeedMetrics(
   targetUrl: string,
   sampleUrls: string[] = []
 ): Promise<PerformanceSnapshot | undefined> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+  // Support multiple common environment variable names for the API key
+  const apiKey =
+    process.env.PAGESPEED_API_KEY ||
+    process.env.PAGESPEEDAPI ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    '';
   const keyParam = apiKey ? `&key=${encodeURIComponent(apiKey)}` : '';
   const cleanTarget = targetUrl.split('#')[0];
+
+  // 1. Check in-memory cache
+  const cached = pageSpeedCache.get(cleanTarget);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.snapshot;
+  }
 
   try {
     const mobileUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanTarget)}&category=performance&category=seo&strategy=mobile${keyParam}`;
     const desktopUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(cleanTarget)}&category=performance&category=seo&strategy=desktop${keyParam}`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 9000); // 9 seconds max
+    // 40 seconds timeout to accommodate full Lighthouse audits from Google PageSpeed Insights
+    const timeoutId = setTimeout(() => controller.abort(), 40000);
 
     const [mobileRes, desktopRes] = await Promise.all([
-      fetch(mobileUrl, { signal: controller.signal, headers: { 'Accept': 'application/json' } }).catch(() => null),
-      fetch(desktopUrl, { signal: controller.signal, headers: { 'Accept': 'application/json' } }).catch(() => null),
+      fetch(mobileUrl, { signal: controller.signal, headers: { 'Accept': 'application/json' } }).catch((err) => {
+        console.warn(`[PageSpeed Mobile] Fetch error for ${cleanTarget}:`, err?.name === 'AbortError' ? 'Timeout (40s)' : err?.message || err);
+        return null;
+      }),
+      fetch(desktopUrl, { signal: controller.signal, headers: { 'Accept': 'application/json' } }).catch((err) => {
+        console.warn(`[PageSpeed Desktop] Fetch error for ${cleanTarget}:`, err?.name === 'AbortError' ? 'Timeout (40s)' : err?.message || err);
+        return null;
+      }),
     ]);
     clearTimeout(timeoutId);
 
     if (!mobileRes && !desktopRes) {
+      console.warn(`[PageSpeed] Both Mobile & Desktop requests failed to reach Google PageSpeed for ${cleanTarget}`);
       return undefined;
+    }
+
+    if (mobileRes && !mobileRes.ok) {
+      const errText = await mobileRes.text().catch(() => '');
+      console.warn(`[PageSpeed Mobile] Response not OK (${mobileRes.status}):`, errText.slice(0, 200));
+    }
+    if (desktopRes && !desktopRes.ok) {
+      const errText = await desktopRes.text().catch(() => '');
+      console.warn(`[PageSpeed Desktop] Response not OK (${desktopRes.status}):`, errText.slice(0, 200));
     }
 
     const mobileJson = mobileRes && mobileRes.ok ? await mobileRes.json().catch(() => null) : null;
@@ -83,7 +120,7 @@ export async function fetchPageSpeedMetrics(
 
     const isPartialData = [mobileScore, desktopScore, lcp, cls, inp, fcp].some(v => v === null);
 
-    return {
+    const snapshot: PerformanceSnapshot = {
       mobileScore,
       desktopScore,
       lcp,
@@ -96,8 +133,13 @@ export async function fetchPageSpeedMetrics(
       sampledUrls: [cleanTarget, ...sampleUrls.slice(0, 3)],
       auditedAt: new Date().toISOString(),
     };
-  } catch {
-    // Graceful fallback if PageSpeed API is unavailable / throttled
+
+    // Save to cache
+    pageSpeedCache.set(cleanTarget, { snapshot, cachedAt: Date.now() });
+
+    return snapshot;
+  } catch (err: any) {
+    console.error(`[PageSpeed] Unexpected exception while analyzing ${cleanTarget}:`, err?.message || err);
     return undefined;
   }
 }

@@ -56,9 +56,9 @@ export const HeroAnalyzer: React.FC<HeroAnalyzerProps> = ({
         {/* Top Badges */}
         <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700/80 rounded-full px-4 py-1.5 mb-6 text-xs text-slate-300 shadow-inner">
           <span className="flex h-2 w-2 rounded-full bg-pink-500 animate-pulse"></span>
-          <span className="font-medium text-pink-400">Prajurit Digital Intelligence</span>
+          <span className="font-medium text-pink-400">Analisis Kompetitor Otomatis</span>
           <span className="text-slate-500">•</span>
-          <span className="text-slate-400">100% Free Without API</span>
+          <span className="text-slate-400">100% Gratis, Tanpa API Key</span>
         </div>
 
         {/* Hero Headlines */}
