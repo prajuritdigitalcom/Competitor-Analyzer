@@ -241,11 +241,11 @@ apiRouter.post('/pagespeed', async (req: Request, res: Response) => {
 
   try {
     const { fetchPageSpeedMetrics } = await import('./pagespeed.js');
-    const snapshot = await fetchPageSpeedMetrics(asyncCheck.normalizedUrl, Array.isArray(sampleUrls) ? sampleUrls : []);
-    if (!snapshot) {
-      res.status(503).json({ error: 'Layanan PageSpeed sedang sibuk atau tidak dapat menjangkau URL.' });
-      return;
-    }
+    const snapshot = await fetchPageSpeedMetrics(
+      asyncCheck.normalizedUrl,
+      Array.isArray(sampleUrls) ? sampleUrls : [],
+      Boolean(req.body?.forceFresh)
+    );
     res.json({ success: true, snapshot });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Gagal mengambil data Core Web Vitals.' });

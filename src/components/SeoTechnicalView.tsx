@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Code,
   CheckCircle2,
@@ -17,9 +17,13 @@ import {
   Award,
   RefreshCw,
   Clock,
-  Sparkles
+  Sparkles,
+  Key,
+  Info,
+  ChevronRight
 } from 'lucide-react';
-import { AnalysisReport } from '../types/index.ts';
+import { AnalysisReport, PerformanceSnapshot } from '../types/index.ts';
+import { postJson } from '../lib/apiClient.ts';
 
 interface SeoTechnicalViewProps {
   report: AnalysisReport;
@@ -28,7 +32,45 @@ interface SeoTechnicalViewProps {
 export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) => {
   const [activeSubTab, setActiveSubTab] = useState<'onpage' | 'cwv' | 'eeat' | 'schema' | 'links' | 'images' | 'technical'>('onpage');
 
-  const { seoSnapshot, linkAnalysis, imageAnalysis, overview, performanceSnapshot, trustSignals, contentFreshness } = report;
+  const { seoSnapshot, linkAnalysis, imageAnalysis, overview, trustSignals, contentFreshness } = report;
+
+  const [currentSnapshot, setCurrentSnapshot] = useState<PerformanceSnapshot | undefined>(report.performanceSnapshot);
+  const [isRetryingCwv, setIsRetryingCwv] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentSnapshot(report.performanceSnapshot);
+  }, [report.performanceSnapshot]);
+
+  const handleRetryPageSpeed = async () => {
+    setIsRetryingCwv(true);
+    setRetryError(null);
+    try {
+      const data = await postJson<{ success: boolean; snapshot: PerformanceSnapshot }>('/api/pagespeed', {
+        url: report.overview.domain,
+        sampleUrls: report.pages.slice(0, 3).map(a => a.url),
+        forceFresh: true,
+      });
+      if (data.success && data.snapshot) {
+        setCurrentSnapshot(data.snapshot);
+      } else {
+        setRetryError('Gagal memproses audit PageSpeed.');
+      }
+    } catch (err: any) {
+      setRetryError(err.message || 'Gagal menghubungi endpoint PageSpeed.');
+    } finally {
+      setIsRetryingCwv(false);
+    }
+  };
+
+  const hasMetrics = currentSnapshot && (
+    currentSnapshot.mobileScore !== null ||
+    currentSnapshot.desktopScore !== null ||
+    currentSnapshot.lcp !== null ||
+    currentSnapshot.cls !== null ||
+    currentSnapshot.inp !== null ||
+    currentSnapshot.fcp !== null
+  );
 
   return (
     <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-6">
@@ -169,9 +211,50 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
       {/* 2. Core Web Vitals Tab (Google PSI) */}
       {activeSubTab === 'cwv' && (
         <div className="space-y-6 animate-in fade-in">
-          {performanceSnapshot ? (
+          {/* Action Header & API Status */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl">
+            <div className="flex items-center gap-2">
+              <Gauge className="w-4 h-4 text-pink-400 shrink-0" />
+              <div className="text-xs">
+                <span className="text-slate-300 font-semibold">Google PageSpeed Insights v5</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                    currentSnapshot?.hasApiKey
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                  }`}>
+                    <Key className="w-2.5 h-2.5" />
+                    {currentSnapshot?.hasApiKey ? 'PAGESPEED_API_KEY Terpasang' : 'Kuota Publik Bersama (Tanpa Key)'}
+                  </span>
+                  {currentSnapshot?.auditedAt && (
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      Audit: {new Date(currentSnapshot.auditedAt).toLocaleTimeString('id-ID')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleRetryPageSpeed}
+              disabled={isRetryingCwv}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 text-xs font-semibold text-white rounded-lg border border-slate-700 transition shadow-sm shrink-0"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRetryingCwv ? 'animate-spin text-pink-400' : ''}`} />
+              {isRetryingCwv ? 'Mengaudit ke Google PSI...' : 'Uji Ulang Core Web Vitals'}
+            </button>
+          </div>
+
+          {retryError && (
+            <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-xl text-xs text-rose-300 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{retryError}</span>
+            </div>
+          )}
+
+          {hasMetrics && currentSnapshot ? (
             <>
-              {performanceSnapshot.isPartialData && (
+              {currentSnapshot.isPartialData && (
                 <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-xl text-xs text-amber-300 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>
@@ -188,13 +271,13 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
                       <Smartphone className="w-3.5 h-3.5 text-pink-400" />
                       <span>Mobile Performance</span>
                     </div>
-                    <p className={`text-2xl font-extrabold font-mono mt-1 ${performanceSnapshot.mobileScore === null ? 'text-slate-500' : performanceSnapshot.mobileScore >= 85 ? 'text-emerald-400' : performanceSnapshot.mobileScore >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
-                      {performanceSnapshot.mobileScore !== null ? `${performanceSnapshot.mobileScore}/100` : '—'}
+                    <p className={`text-2xl font-extrabold font-mono mt-1 ${currentSnapshot.mobileScore === null ? 'text-slate-500' : currentSnapshot.mobileScore >= 85 ? 'text-emerald-400' : currentSnapshot.mobileScore >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                      {currentSnapshot.mobileScore !== null ? `${currentSnapshot.mobileScore}/100` : '—'}
                     </p>
                   </div>
-                  {performanceSnapshot.mobileScore !== null ? (
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${performanceSnapshot.mobileScore >= 85 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : performanceSnapshot.mobileScore >= 50 ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>
-                      {performanceSnapshot.mobileScore >= 85 ? 'Cepat' : performanceSnapshot.mobileScore >= 50 ? 'Sedang' : 'Perlu Optimasi'}
+                  {currentSnapshot.mobileScore !== null ? (
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${currentSnapshot.mobileScore >= 85 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : currentSnapshot.mobileScore >= 50 ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'}`}>
+                      {currentSnapshot.mobileScore >= 85 ? 'Cepat' : currentSnapshot.mobileScore >= 50 ? 'Sedang' : 'Perlu Optimasi'}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-500 px-2 py-1 bg-slate-900 rounded-lg">N/A</span>
@@ -207,13 +290,13 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
                       <Monitor className="w-3.5 h-3.5 text-indigo-400" />
                       <span>Desktop Performance</span>
                     </div>
-                    <p className={`text-2xl font-extrabold font-mono mt-1 ${performanceSnapshot.desktopScore === null ? 'text-slate-500' : performanceSnapshot.desktopScore >= 85 ? 'text-emerald-400' : performanceSnapshot.desktopScore >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
-                      {performanceSnapshot.desktopScore !== null ? `${performanceSnapshot.desktopScore}/100` : '—'}
+                    <p className={`text-2xl font-extrabold font-mono mt-1 ${currentSnapshot.desktopScore === null ? 'text-slate-500' : currentSnapshot.desktopScore >= 85 ? 'text-emerald-400' : currentSnapshot.desktopScore >= 50 ? 'text-amber-400' : 'text-rose-400'}`}>
+                      {currentSnapshot.desktopScore !== null ? `${currentSnapshot.desktopScore}/100` : '—'}
                     </p>
                   </div>
-                  {performanceSnapshot.desktopScore !== null ? (
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${performanceSnapshot.desktopScore >= 85 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
-                      {performanceSnapshot.desktopScore >= 85 ? 'Optimal' : 'Standard'}
+                  {currentSnapshot.desktopScore !== null ? (
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${currentSnapshot.desktopScore >= 85 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'}`}>
+                      {currentSnapshot.desktopScore >= 85 ? 'Optimal' : 'Standard'}
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-500 px-2 py-1 bg-slate-900 rounded-lg">N/A</span>
@@ -222,8 +305,8 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
 
                 <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800">
                   <span className="text-xs text-slate-400">LCP (Largest Contentful)</span>
-                  <p className={`text-2xl font-extrabold font-mono mt-1 ${performanceSnapshot.lcp === null ? 'text-slate-500' : performanceSnapshot.lcp <= 2500 ? 'text-emerald-400' : performanceSnapshot.lcp <= 4000 ? 'text-amber-400' : 'text-rose-400'}`}>
-                    {performanceSnapshot.lcp !== null ? `${(performanceSnapshot.lcp / 1000).toFixed(2)}s` : '—'}
+                  <p className={`text-2xl font-extrabold font-mono mt-1 ${currentSnapshot.lcp === null ? 'text-slate-500' : currentSnapshot.lcp <= 2500 ? 'text-emerald-400' : currentSnapshot.lcp <= 4000 ? 'text-amber-400' : 'text-rose-400'}`}>
+                    {currentSnapshot.lcp !== null ? `${(currentSnapshot.lcp / 1000).toFixed(2)}s` : '—'}
                   </p>
                   <span className="text-[11px] text-slate-500">
                     Target Google: &lt; 2.5s
@@ -232,8 +315,8 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
 
                 <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800">
                   <span className="text-xs text-slate-400">CLS (Layout Shift)</span>
-                  <p className={`text-2xl font-extrabold font-mono mt-1 ${performanceSnapshot.cls === null ? 'text-slate-500' : performanceSnapshot.cls <= 0.1 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    {performanceSnapshot.cls !== null ? performanceSnapshot.cls : '—'}
+                  <p className={`text-2xl font-extrabold font-mono mt-1 ${currentSnapshot.cls === null ? 'text-slate-500' : currentSnapshot.cls <= 0.1 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {currentSnapshot.cls !== null ? currentSnapshot.cls : '—'}
                   </p>
                   <span className="text-[11px] text-slate-500">
                     Target Google: &lt; 0.10
@@ -246,21 +329,21 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
                 <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
                   <span className="text-xs text-slate-300">INP / Max Potential FID</span>
                   <span className="text-xs font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded">
-                    {performanceSnapshot.inp !== null ? `${performanceSnapshot.inp} ms` : '—'}
+                    {currentSnapshot.inp !== null ? `${currentSnapshot.inp} ms` : '—'}
                   </span>
                 </div>
 
                 <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
                   <span className="text-xs text-slate-300">FCP (First Contentful Paint)</span>
                   <span className="text-xs font-mono font-bold text-white bg-slate-800 px-2 py-0.5 rounded">
-                    {performanceSnapshot.fcp !== null ? `${(performanceSnapshot.fcp / 1000).toFixed(2)} s` : '—'}
+                    {currentSnapshot.fcp !== null ? `${(currentSnapshot.fcp / 1000).toFixed(2)} s` : '—'}
                   </span>
                 </div>
 
                 <div className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800 flex items-center justify-between">
                   <span className="text-xs text-slate-300">Mobile-Friendliness</span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${performanceSnapshot.isMobileFriendly === true ? 'text-emerald-400 bg-emerald-500/10' : performanceSnapshot.isMobileFriendly === false ? 'text-amber-400 bg-amber-500/10' : 'text-slate-500 bg-slate-900'}`}>
-                    {performanceSnapshot.isMobileFriendly === true ? '✓ Mobile Friendly' : performanceSnapshot.isMobileFriendly === false ? 'Perlu Optimasi Viewport' : '—'}
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded ${currentSnapshot.isMobileFriendly === true ? 'text-emerald-400 bg-emerald-500/10' : currentSnapshot.isMobileFriendly === false ? 'text-amber-400 bg-amber-500/10' : 'text-slate-500 bg-slate-900'}`}>
+                    {currentSnapshot.isMobileFriendly === true ? '✓ Mobile Friendly' : currentSnapshot.isMobileFriendly === false ? 'Perlu Optimasi Viewport' : '—'}
                   </span>
                 </div>
               </div>
@@ -269,21 +352,70 @@ export const SeoTechnicalView: React.FC<SeoTechnicalViewProps> = ({ report }) =>
                 <div className="flex items-center gap-2">
                   <Gauge className="w-4 h-4 text-pink-400 shrink-0" />
                   <span>
-                    Audit PageSpeed diuji pada: <strong className="text-slate-200">{performanceSnapshot.sampledUrls[0]}</strong> ({performanceSnapshot.sampledUrls.length} sampel halaman)
+                    Audit PageSpeed diuji pada: <strong className="text-slate-200">{currentSnapshot.sampledUrls[0]}</strong> ({currentSnapshot.sampledUrls.length} sampel halaman)
                   </span>
                 </div>
                 <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                  {new Date(performanceSnapshot.auditedAt).toLocaleTimeString('id-ID')}
+                  {new Date(currentSnapshot.auditedAt).toLocaleTimeString('id-ID')}
                 </span>
               </div>
             </>
           ) : (
-            <div className="p-6 bg-slate-950/40 border border-slate-800 rounded-xl text-center space-y-2">
-              <Gauge className="w-8 h-8 text-slate-500 mx-auto" />
-              <p className="text-xs text-slate-300 font-semibold">Data Core Web Vitals tidak tersedia</p>
-              <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                Layanan Google PageSpeed Insights sedang sibuk atau URL target memerlukan waktu respon lebih lama.
-              </p>
+            /* Diagnostic Error Details Card */
+            <div className="p-6 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-4">
+              <div className="flex items-start gap-3.5">
+                <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-amber-400" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    {currentSnapshot?.errorReason === 'AUTH_ERROR' && 'Kunci API PageSpeed Ditolak (403 Forbidden)'}
+                    {currentSnapshot?.errorReason === 'PUBLIC_QUOTA_EXHAUSTED' && 'Kuota Publik Google PSI Habis (Shared IP Vercel)'}
+                    {currentSnapshot?.errorReason === 'RATE_LIMITED' && 'Batas Kuota PageSpeed Tercapai (429 Rate Limit)'}
+                    {currentSnapshot?.errorReason === 'TIMEOUT' && 'Waktu Audit PageSpeed Melebihi Batas (>40 detik)'}
+                    {currentSnapshot?.errorReason === 'UNREACHABLE' && 'Tidak Dapat Terhubung ke Google PSI'}
+                    {(!currentSnapshot?.errorReason || currentSnapshot?.errorReason === 'UNKNOWN') && 'Data Core Web Vitals Tidak Tersedia'}
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {currentSnapshot?.errorDetails || 'Google PageSpeed Insights tidak mengembalikan metrik performa untuk domain ini saat pengujian.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Actionable Resolution Guide */}
+              <div className="p-4 bg-slate-900/90 border border-slate-800 rounded-xl space-y-3 text-xs">
+                <div className="flex items-center gap-2 text-pink-400 font-semibold">
+                  <Info className="w-4 h-4" />
+                  <span>Panduan Mengaktifkan Data Core Web Vitals di Vercel:</span>
+                </div>
+
+                <ol className="list-decimal list-inside space-y-2 text-slate-300 ml-1 leading-relaxed">
+                  <li>
+                    Buka <a href="https://console.cloud.google.com/apis/library/pagespeedonline.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:underline font-semibold inline-flex items-center gap-1">
+                      Google Cloud Console: PageSpeed Insights API <ExternalLink className="w-3 h-3" />
+                    </a> dengan akun Google Anda, lalu klik tombol <strong>"Enable"</strong>.
+                  </li>
+                  <li>
+                    Di menu <strong>APIs & Services &rarr; Credentials</strong>, klik API key Anda dan pastikan <strong>Application restrictions</strong> diset ke <strong>"None"</strong> (karena panggilan dilakukan dari server backend Node.js).
+                  </li>
+                  <li>
+                    Buka dashboard <strong>Vercel &rarr; Project Settings &rarr; Environment Variables</strong>, tambahkan variable:
+                    <div className="mt-1.5 p-2 bg-slate-950 font-mono text-[11px] text-pink-300 rounded border border-slate-800 select-all">
+                      PAGESPEED_API_KEY = (Paste API Key Google Anda)
+                    </div>
+                  </li>
+                  <li>
+                    Lakukan <strong>Redeploy</strong> di Vercel, lalu klik tombol <strong>"Uji Ulang Core Web Vitals"</strong> di atas.
+                  </li>
+                </ol>
+
+                <div className="pt-2 border-t border-slate-800 flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                  <span>Alternatif verifikasi cepat lewat terminal:</span>
+                  <code className="bg-slate-950 px-2 py-1 rounded text-slate-300 font-mono text-[10px] select-all">
+                    curl "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https://web.dev/&key=YOUR_KEY"
+                  </code>
+                </div>
+              </div>
             </div>
           )}
         </div>

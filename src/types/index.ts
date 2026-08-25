@@ -208,6 +208,9 @@ export interface PerformanceSnapshot {
   isPartialData?: boolean;
   sampledUrls: string[];
   auditedAt: string;
+  errorReason?: 'AUTH_ERROR' | 'RATE_LIMITED' | 'PUBLIC_QUOTA_EXHAUSTED' | 'TIMEOUT' | 'UNREACHABLE' | 'UNKNOWN';
+  errorDetails?: string;
+  hasApiKey?: boolean;
 }
 
 export interface TrustSignals {
