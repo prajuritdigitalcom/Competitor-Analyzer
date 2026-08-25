@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/[...path].ts": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "includeFiles": "node_modules/@google/genai/**"
     }
   }
 }

@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import {
   ActionableInsight,
   AnalysisReport,
@@ -335,6 +334,7 @@ export async function buildSemanticClustersAsync(
   }
 
   try {
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI();
     const sampleArticles = pages.slice(0, 25).map(p => ({
       title: p.metadata.title || p.path,
@@ -622,6 +622,7 @@ export async function generateActionableInsightsAsync(
   }
 
   try {
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI();
     const prompt = `Analisis data SEO kompetitor untuk domain "${domain}":
 - Total Artikel: ${contentStats.totalArticles}, Rata-rata kata: ${contentStats.avgWordsPerArticle}

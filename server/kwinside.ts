@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { ByokBestPage, ByokCompetitorDomain, ByokData, ByokRankingKeyword, GeoSearchCitation } from '../src/types/index.js';
 
 export interface SEOProvider {
@@ -25,6 +24,7 @@ export async function checkGeoSearchCitations(
   const citations: GeoSearchCitation[] = [];
 
   try {
+    const { GoogleGenAI } = await import('@google/genai');
     const ai = new GoogleGenAI();
 
     for (const kw of sampleKws) {
