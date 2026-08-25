@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { AnalysisMode, AnalysisReport, ContentGapResult } from './types/index.ts';
 import { clearAllReports, deleteReportById, getAllReports, saveReportToHistory } from './lib/storage.ts';
+import { postJson } from './lib/apiClient.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { HeroAnalyzer } from './components/HeroAnalyzer.tsx';
 import { Dashboard } from './components/Dashboard.tsx';
@@ -62,15 +63,12 @@ export default function App() {
         apiKey: mode === 'byok' ? apiKey : undefined,
       };
 
-      const res = await fetch('/api/crawl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      const data = await postJson<{ success: boolean; report: AnalysisReport; error?: string }>(
+        '/api/crawl',
+        payload
+      );
 
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
+      if (!data.success || !data.report) {
         throw new Error(data.error || 'Gagal menganalisis website kompetitor.');
       }
 
@@ -153,13 +151,11 @@ export default function App() {
       return existing;
     }
 
-    const res = await fetch('/api/crawl', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: urlStr, mode: 'free' }),
-    });
-    const data = await res.json();
-    if (!res.ok || !data.success || !data.report) {
+    const data = await postJson<{ success: boolean; report: AnalysisReport; error?: string }>(
+      '/api/crawl',
+      { url: urlStr, mode: 'free' }
+    );
+    if (!data.success || !data.report) {
       throw new Error(data.error || `Gagal menganalisis domain ${urlStr}`);
     }
     const newRep: AnalysisReport = data.report;
@@ -180,14 +176,12 @@ export default function App() {
     setReports(updatedList);
 
     // 3. Call gap comparison API
-    const res = await fetch('/api/gap-compare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetReport: targetRep, competitorReport: competitorRep }),
-    });
+    const data = await postJson<{ success: boolean; gapResult: ContentGapResult; error?: string }>(
+      '/api/gap-compare',
+      { targetReport: targetRep, competitorReport: competitorRep }
+    );
 
-    const data = await res.json();
-    if (!res.ok || !data.success || !data.gapResult) {
+    if (!data.success || !data.gapResult) {
       throw new Error(data.error || 'Gagal membandingkan peluang celah konten.');
     }
 

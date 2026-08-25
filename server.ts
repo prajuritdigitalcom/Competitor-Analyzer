@@ -21,12 +21,25 @@ app.use(express.urlencoded({ extended: true }));
 // API Router
 app.use('/api', apiRouter);
 
+// Fallback: rute /api/* yang tidak dikenali harus tetap menjawab JSON, jangan sampai
+// jatuh ke catch-all SPA (index.html) di bawah.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Endpoint API tidak ditemukan.' });
+});
+
 // Static files in production
 const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
 app.get('*', (_req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
+});
+
+// Global error handler — pastikan exception tak tertangani tetap dikembalikan sebagai JSON,
+// bukan halaman HTML bawaan Express.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Unhandled Error]', err);
+  res.status(500).json({ error: err?.message || 'Terjadi kesalahan pada server.' });
 });
 
 app.listen(PORT, () => {

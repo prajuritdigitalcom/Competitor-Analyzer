@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Key, ShieldCheck, CheckCircle2, AlertCircle, X, ExternalLink, RefreshCw, Zap } from 'lucide-react';
+import { postJson } from '../lib/apiClient.ts';
 
 interface ByokModalProps {
   isOpen: boolean;
@@ -32,18 +33,15 @@ export const ByokModal: React.FC<ByokModalProps> = ({
     setTestResult(null);
 
     try {
-      const res = await fetch('/api/kwinside/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: inputKey.trim() }),
+      const data = await postJson<{ isValid?: boolean; message?: string }>('/api/kwinside/test', {
+        apiKey: inputKey.trim(),
       });
-      const data = await res.json();
       setTestResult(data);
       if (data.isValid) {
         onSaveApiKey(inputKey.trim());
       }
     } catch (err: any) {
-      setTestResult({ isValid: false, message: `Gagal memverifikasi ke server Kwinside: ${err.message || 'Koneksi error'}` });
+      setTestResult({ isValid: false, message: err.message || 'Gagal memverifikasi ke server Kwinside.' });
     } finally {
       setTesting(false);
     }

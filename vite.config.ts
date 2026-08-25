@@ -14,6 +14,17 @@ function expressApiPlugin(): Plugin {
       app.use(express.urlencoded({ extended: true }));
       app.use('/api', apiRouter);
 
+      // Fallback JSON 404 khusus /api, sama seperti di server.ts produksi
+      app.use('/api', (_req, res) => {
+        res.status(404).json({ error: 'Endpoint API tidak ditemukan.' });
+      });
+
+      // Global JSON error handler untuk mode dev
+      app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+        console.error('[Unhandled Error - Dev]', err);
+        res.status(500).json({ error: err?.message || 'Terjadi kesalahan pada server (dev).' });
+      });
+
       server.middlewares.use(app);
     },
   };

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, X, Sparkles, ArrowRight, CheckCircle2, AlertCircle, TrendingUp, Lightbulb, FileText } from 'lucide-react';
 import { AnalysisReport, ContentGapResult } from '../types/index.ts';
+import { postJson } from '../lib/apiClient.ts';
 
 interface ContentGapModalProps {
   isOpen: boolean;
@@ -46,12 +47,10 @@ export const ContentGapModal: React.FC<ContentGapModalProps> = ({
 
       if (targetReport && compReport) {
         setLoadingStep('Membandingkan data laporan yang tersimpan...');
-        const res = await fetch('/api/gap-compare', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetReport, competitorReport: compReport }),
-        });
-        const data = await res.json();
+        const data = await postJson<{ success: boolean; gapResult: ContentGapResult; error?: string }>(
+          '/api/gap-compare',
+          { targetReport, competitorReport: compReport }
+        );
         if (data.success && data.gapResult) {
           setGapResult(data.gapResult);
         } else {
